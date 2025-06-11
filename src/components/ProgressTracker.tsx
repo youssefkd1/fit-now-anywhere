@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,90 +10,118 @@ interface ProgressTrackerProps {
 
 const ProgressTracker = ({ user }: ProgressTrackerProps) => {
   const [selectedPeriod, setSelectedPeriod] = useState("week");
+  const [userStats, setUserStats] = useState(() => {
+    const saved = localStorage.getItem('userStats');
+    return saved ? JSON.parse(saved) : {
+      totalWorkouts: 0,
+      totalTime: 0,
+      currentStreak: 0,
+      totalCalories: 0,
+      completedWorkouts: []
+    };
+  });
 
-  const stats = {
-    totalWorkouts: 42,
-    totalTime: "14.5 hours",
-    currentStreak: 7,
-    longestStreak: 12,
-    caloriesBurned: 2340,
-    averageWorkoutTime: "21 mins",
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   };
 
-  const recentWorkouts = [
-    {
-      id: 1,
-      name: "Morning Full Body",
-      date: "2024-01-15",
-      duration: "25 mins",
-      exercises: 8,
-      calories: 180,
-      completed: true,
-    },
-    {
-      id: 2,
-      name: "Core Blast",
-      date: "2024-01-14",
-      duration: "15 mins",
-      exercises: 6,
-      calories: 120,
-      completed: true,
-    },
-    {
-      id: 3,
-      name: "HIIT Cardio",
-      date: "2024-01-13",
-      duration: "20 mins",
-      exercises: 7,
-      calories: 200,
-      completed: true,
-    },
-    {
-      id: 4,
-      name: "Upper Body",
-      date: "2024-01-12",
-      duration: "30 mins",
-      exercises: 10,
-      calories: 210,
-      completed: true,
-    },
-  ];
+  const calculateAverageWorkoutTime = () => {
+    if (userStats.totalWorkouts === 0) return "0m";
+    const avgSeconds = userStats.totalTime / userStats.totalWorkouts;
+    return formatTime(Math.round(avgSeconds));
+  };
+
+  const getLongestStreak = () => {
+    // This would typically be calculated from workout dates
+    // For now, we'll use current streak as longest
+    return Math.max(userStats.currentStreak, 0);
+  };
+
+  const stats = {
+    totalWorkouts: userStats.totalWorkouts,
+    totalTime: formatTime(userStats.totalTime),
+    currentStreak: userStats.currentStreak,
+    longestStreak: getLongestStreak(),
+    caloriesBurned: userStats.totalCalories,
+    averageWorkoutTime: calculateAverageWorkoutTime(),
+  };
+
+  const recentWorkouts = userStats.completedWorkouts.slice(-4).reverse().map((workout: any, index: number) => ({
+    id: index,
+    name: workout.name,
+    date: new Date(workout.date).toLocaleDateString(),
+    duration: formatTime(workout.duration),
+    exercises: workout.exercisesCompleted,
+    calories: workout.caloriesEstimated,
+    completed: true,
+  }));
+
+  // Generate weekly data from completed workouts
+  const generateWeeklyData = () => {
+    const today = new Date();
+    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekData = weekDays.map(day => ({ day, workouts: 0, duration: 0 }));
+
+    userStats.completedWorkouts.forEach((workout: any) => {
+      const workoutDate = new Date(workout.date);
+      const daysDiff = Math.floor((today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff >= 0 && daysDiff < 7) {
+        const dayIndex = (today.getDay() + 6 - daysDiff) % 7; // Convert to Monday-first week
+        if (dayIndex >= 0 && dayIndex < 7) {
+          weekData[dayIndex].workouts += 1;
+          weekData[dayIndex].duration += Math.round(workout.duration / 60); // Convert to minutes
+        }
+      }
+    });
+
+    return weekData;
+  };
+
+  const weeklyData = generateWeeklyData();
 
   const achievements = [
     {
-      name: "First Week",
-      description: "Complete 7 workouts",
+      name: "First Workout",
+      description: "Complete your first workout",
       icon: "🎯",
-      unlocked: true,
+      unlocked: userStats.totalWorkouts >= 1,
     },
     {
       name: "Consistency King",
-      description: "10-day workout streak",
+      description: "5-day workout streak",
       icon: "👑",
-      unlocked: false,
+      unlocked: userStats.currentStreak >= 5,
     },
     {
       name: "Calorie Crusher",
-      description: "Burn 1000 calories",
+      description: "Burn 500 calories",
       icon: "🔥",
-      unlocked: true,
+      unlocked: userStats.totalCalories >= 500,
     },
     {
       name: "Time Master",
-      description: "Complete 10 hours of workouts",
+      description: "Complete 2 hours of workouts",
       icon: "⏰",
-      unlocked: true,
+      unlocked: userStats.totalTime >= 7200, // 2 hours in seconds
     },
-  ];
-
-  const weeklyData = [
-    { day: "Mon", workouts: 1, duration: 25 },
-    { day: "Tue", workouts: 1, duration: 20 },
-    { day: "Wed", workouts: 0, duration: 0 },
-    { day: "Thu", workouts: 1, duration: 30 },
-    { day: "Fri", workouts: 1, duration: 15 },
-    { day: "Sat", workouts: 2, duration: 45 },
-    { day: "Sun", workouts: 1, duration: 20 },
+    {
+      name: "Workout Warrior",
+      description: "Complete 10 workouts",
+      icon: "💪",
+      unlocked: userStats.totalWorkouts >= 10,
+    },
+    {
+      name: "Marathon Mindset",
+      description: "Burn 1000 calories total",
+      icon: "🏃‍♂️",
+      unlocked: userStats.totalCalories >= 1000,
+    },
   ];
 
   return (
@@ -193,35 +220,37 @@ const ProgressTracker = ({ user }: ProgressTrackerProps) => {
       </Card>
 
       {/* Recent Workouts */}
-      <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle>Recent Workouts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {recentWorkouts.map((workout) => (
-              <div
-                key={workout.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex-1">
-                  <div className="font-medium">{workout.name}</div>
-                  <div className="text-sm text-gray-500">
-                    {workout.date} • {workout.exercises} exercises
+      {recentWorkouts.length > 0 && (
+        <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle>Recent Workouts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentWorkouts.map((workout) => (
+                <div
+                  key={workout.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">{workout.name}</div>
+                    <div className="text-sm text-gray-500">
+                      {workout.date} • {workout.exercises} exercises
+                    </div>
                   </div>
+                  <div className="text-right">
+                    <div className="font-medium">{workout.duration}</div>
+                    <div className="text-sm text-gray-500">{workout.calories} cal</div>
+                  </div>
+                  <Badge className="ml-2 bg-green-100 text-green-800">
+                    ✓ Done
+                  </Badge>
                 </div>
-                <div className="text-right">
-                  <div className="font-medium">{workout.duration}</div>
-                  <div className="text-sm text-gray-500">{workout.calories} cal</div>
-                </div>
-                <Badge className="ml-2 bg-green-100 text-green-800">
-                  ✓ Done
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Achievements */}
       <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
